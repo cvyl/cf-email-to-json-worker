@@ -28,7 +28,6 @@ The worker performs the following tasks:
      [[r2_buckets]]
      binding = "R2_BUCKET" # Reference name for the bucket in the code
      bucket_name = "your-r2-bucket-name"
-     preview_bucket_name = "your-r2-preview-bucket-name"
      ```
 
 4. **Update Allowlist**
