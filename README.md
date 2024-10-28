@@ -50,7 +50,7 @@ The worker performs the following tasks:
    - Use the `wrangler` CLI to deploy:
 
      ```bash
-     npx wrangler deploy
+     pnpm run deploy
      ```
 
 ## Usage
