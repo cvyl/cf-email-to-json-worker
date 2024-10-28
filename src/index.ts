@@ -5,97 +5,48 @@ export interface Env {
   R2_BUCKET: R2Bucket;
 }
 
-export default {
-  async email(message: any, env: Env, ctx: ExecutionContext) {
-    const allowList = ["anyone@example.com", "coworker@example.com"];
+const ALLOW_LIST = ["anyone@example.com", "coworker@example.com"];
 
-    if (!allowList.includes(message.from)) {
-      message.setReject("Address not allowed");
-      return;
-    }
+export default {
+  async email(message: any, env: Env) {
+    if (!ALLOW_LIST.includes(message.from)) return message.setReject("Address not allowed");
 
     const existingDataFile = await env.R2_BUCKET.get("email_log.json");
     const existingData = existingDataFile ? JSON.parse(await existingDataFile.text()) : [];
-    const nextId = existingData.length > 0 ? existingData[existingData.length - 1].id + 1 : 1;
-    const parsedContent = await parseEmailContent(message, env, nextId);
-
-    existingData.push(parsedContent);
+    const nextId = existingData.length ? existingData[existingData.length - 1].id + 1 : 1;
+    existingData.push(await parseEmailContent(message, env, nextId));
 
     await env.R2_BUCKET.put("email_log.json", JSON.stringify(existingData, null, 2));
   },
 
   async fetch(request: Request, env: Env) {
-    const url = new URL(request.url);
+    const { pathname } = new URL(request.url);
 
-    // Serve file if path starts with /media/
-    if (url.pathname.startsWith("/media/")) {
-      const fileName = url.pathname.replace("/media/", "");
-      const fileObject = await env.R2_BUCKET.get(`media/${fileName}`);
-
-      if (fileObject) {
-        return new Response(fileObject.body, {
-          headers: {
-            "Content-Type": fileObject.httpMetadata?.contentType || "application/octet-stream",
-          },
-        });
-      } else {
-        return new Response("File not found", { status: 404 });
-      }
+    if (pathname.startsWith("/media/")) {
+      const file = await env.R2_BUCKET.get(pathname.slice(1));
+      return file
+        ? new Response(file.body, { headers: { "Content-Type": file.httpMetadata?.contentType || "application/octet-stream" } })
+        : new Response("File not found", { status: 404 });
     }
 
-    // Return JSON log data for base path
-    if (url.pathname === "/") {
+    if (pathname === "/") {
       const logFile = await env.R2_BUCKET.get("email_log.json");
-
-      if (logFile) {
-        const logText = await logFile.text();
-        return new Response(logText, {
-          headers: { "Content-Type": "application/json" },
-        });
-      } else {
-        return new Response(JSON.stringify([]), {
-          headers: { "Content-Type": "application/json" },
-        });
-      }
-    } else {
-      return new Response("Not Found", { status: 404 });
+      const logText = await logFile?.text() || "[]";
+      return new Response(logText, { headers: { "Content-Type": "application/json" } });
     }
+
+    return new Response("Not Found", { status: 404 });
   }
 };
 
-// Helper function to parse email content using letterparser
 async function parseEmailContent(message: any, env: Env, id: number) {
-  const rawEmail = (await new Response(message.raw).text()).replace(/utf-8/gi, 'utf-8');
-  const email = parseRawEmail(rawEmail);
+  const email = parseRawEmail((await new Response(message.raw).text()).replace(/utf-8/gi, 'utf-8'));
 
-  const parsed = {
-    id,  // Use the sequential numeric ID provided
-    date: new Date().toISOString(),
-    text: email.text || "",
-    files: [] as {
-      file_name: string;
-      mime_type: string;
-      url: string;
-      date: string;
-    }[],
-  };
+  const files = await Promise.all(email.attachments?.map(async (attachment) => {
+    const file_name = attachment.filename || "unnamed_file";
+    if (attachment.body) await env.R2_BUCKET.put(`media/${file_name}`, attachment.body);
+    return { file_name, mime_type: attachment.contentType, url: `media/${file_name}`, date: new Date().toISOString() };
+  }) || []);
 
-  // Process attachments (if any)
-  for (const attachment of email.attachments || []) {
-    const fileData = {
-      file_name: attachment.filename || "unnamed_file",
-      mime_type: attachment.contentType as unknown as string,
-      url: `media/${attachment.filename || "unnamed_file"}`,
-      date: new Date().toISOString(),
-    };
-
-    if (attachment.body) {
-      // Upload attachment to R2
-      await env.R2_BUCKET.put(`media/${attachment.filename || "unnamed_file"}`, attachment.body);
-    }
-
-    parsed.files.push(fileData);
-  }
-
-  return parsed;
+  return { id, date: new Date().toISOString(), text: email.text || "", files };
 }
