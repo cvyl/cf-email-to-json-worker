@@ -25,7 +25,26 @@ export default {
   },
 
   async fetch(request: Request, env: Env) {
-    if (request.method === "GET") {
+    const url = new URL(request.url);
+
+    // Serve file if path starts with /media/
+    if (url.pathname.startsWith("/media/")) {
+      const fileName = url.pathname.replace("/media/", "");
+      const fileObject = await env.R2_BUCKET.get(`media/${fileName}`);
+
+      if (fileObject) {
+        return new Response(fileObject.body, {
+          headers: {
+            "Content-Type": fileObject.httpMetadata?.contentType || "application/octet-stream",
+          },
+        });
+      } else {
+        return new Response("File not found", { status: 404 });
+      }
+    }
+
+    // Return JSON log data for base path
+    if (url.pathname === "/") {
       const logFile = await env.R2_BUCKET.get("email_log.json");
 
       if (logFile) {
@@ -39,7 +58,7 @@ export default {
         });
       }
     } else {
-      return new Response("Method not allowed", { status: 405 });
+      return new Response("Not Found", { status: 404 });
     }
   }
 };
