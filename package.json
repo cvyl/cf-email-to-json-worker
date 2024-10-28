@@ -1,6 +1,8 @@
 {
   "name": "email-to-json-worker",
-  "version": "0.0.0",
+  "author": "Mikka (cvyl)",
+	"repository": "https://github.com/cvyl/cf-email-to-json-worker",
+  "version": "1.0.1",
   "private": true,
   "scripts": {
     "deploy": "wrangler deploy",
@@ -8,10 +10,8 @@
     "cf-typegen": "wrangler types"
   },
   "devDependencies": {
-    "@cloudflare/vitest-pool-workers": "^0.5.2",
     "@cloudflare/workers-types": "^4.20241022.0",
     "typescript": "^5.5.2",
-    "vitest": "2.0.5",
     "wrangler": "^3.60.3"
   },
   "dependencies": {
